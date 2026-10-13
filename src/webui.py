@@ -5,6 +5,29 @@ import urllib.request
 import zipfile
 from argparse import ArgumentParser
 
+import copy
+import dataclasses
+
+# Python 3.12+ compatibility patch for legacy fairseq dataclasses
+_orig_get_field = getattr(dataclasses, "_get_field", None)
+if _orig_get_field is not None:
+    def _safe_get_field(*args, **kwargs):
+        try:
+            return _orig_get_field(*args, **kwargs)
+        except ValueError as e:
+            if "mutable default" in str(e):
+                cls = args[0]
+                a_name = args[1]
+                default_val = getattr(cls, a_name, None)
+                f = dataclasses.field(default_factory=lambda: copy.deepcopy(default_val))
+                f.name = a_name
+                f.type = args[2]
+                f._field_type = getattr(dataclasses, "_FIELD", 1)
+                f.kw_only = False
+                return f
+            raise
+    dataclasses._get_field = _safe_get_field
+
 import torch
 
 # PyTorch 2.6+ compatibility patch for fairseq / RVC models
