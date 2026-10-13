@@ -2,6 +2,15 @@ from multiprocessing import cpu_count
 from pathlib import Path
 
 import torch
+
+# PyTorch 2.6+ compatibility patch for fairseq / RVC models
+_orig_torch_load = torch.load
+def _safe_torch_load(*args, **kwargs):
+    if "weights_only" not in kwargs:
+        kwargs["weights_only"] = False
+    return _orig_torch_load(*args, **kwargs)
+torch.load = _safe_torch_load
+
 from fairseq import checkpoint_utils
 from scipy.io import wavfile
 

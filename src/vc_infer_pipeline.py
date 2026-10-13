@@ -4,6 +4,10 @@ from time import time as ttime
 import faiss
 import librosa
 import numpy as np
+if not hasattr(np, "int"):
+    np.int = int
+if not hasattr(np, "float"):
+    np.float = float
 import os
 import parselmouth
 import pyworld
@@ -243,8 +247,18 @@ class VC(object):
                 f0 = pyworld.stonemask(x.astype(np.double), f0, t, self.sr)
                 f0 = signal.medfilt(f0, 3)
                 f0 = f0[1:]
-            # elif method == "pyin": Not Working just yet
-            #    f0 = self.get_f0_pyin_computation(x, f0_min, f0_max)
+            elif method in ["rmvpe", "rmvpe+"]:
+                if hasattr(self, "model_rmvpe") == False:
+                    from rmvpe import RMVPE
+
+                    self.model_rmvpe = RMVPE(
+                        os.path.join(BASE_DIR, 'rvc_models', 'rmvpe.pt'), is_half=self.is_half, device=self.device
+                    )
+                f0 = self.model_rmvpe.infer_from_audio(x, thred=0.03)
+                if method == "rmvpe+":
+                    f0[(f0 < f0_min) | (f0 > f0_max)] = 0
+                    if filter_radius > 2:
+                        f0 = signal.medfilt(f0, 3)
             # Push method to the stack
             f0_computation_stack.append(f0)
 
@@ -319,7 +333,7 @@ class VC(object):
             f0 = self.get_f0_crepe_computation(
                 x, f0_min, f0_max, p_len, crepe_hop_length, "tiny"
             )
-        elif f0_method == "rmvpe":
+        elif f0_method in ["rmvpe", "rmvpe+"]:
             if hasattr(self, "model_rmvpe") == False:
                 from rmvpe import RMVPE
 
@@ -327,6 +341,10 @@ class VC(object):
                     os.path.join(BASE_DIR, 'rvc_models', 'rmvpe.pt'), is_half=self.is_half, device=self.device
                 )
             f0 = self.model_rmvpe.infer_from_audio(x, thred=0.03)
+            if f0_method == "rmvpe+":
+                f0[(f0 < f0_min) | (f0 > f0_max)] = 0
+                if filter_radius > 2:
+                    f0 = signal.medfilt(f0, 3)
 
         elif "hybrid" in f0_method:
             # Perform hybrid median pitch estimation
@@ -365,7 +383,7 @@ class VC(object):
         ) + 1
         f0_mel[f0_mel <= 1] = 1
         f0_mel[f0_mel > 255] = 255
-        f0_coarse = np.rint(f0_mel).astype(np.int)
+        f0_coarse = np.rint(f0_mel).astype(int)
 
         return f0_coarse, f0bak  # 1-0
 

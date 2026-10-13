@@ -5,6 +5,16 @@ import urllib.request
 import zipfile
 from argparse import ArgumentParser
 
+import torch
+
+# PyTorch 2.6+ compatibility patch for fairseq / RVC models
+_orig_torch_load = torch.load
+def _safe_torch_load(*args, **kwargs):
+    if "weights_only" not in kwargs:
+        kwargs["weights_only"] = False
+    return _orig_torch_load(*args, **kwargs)
+torch.load = _safe_torch_load
+
 import gradio as gr
 
 from main import song_cover_pipeline
@@ -85,12 +95,14 @@ def download_online_model(url, dir_name, progress=gr.Progress()):
         return f'[+] {dir_name} Model successfully downloaded!'
 
     except Exception as e:
+        if os.path.exists(extraction_folder):
+            shutil.rmtree(extraction_folder, ignore_errors=True)
         raise gr.Error(str(e))
 
 
 def upload_local_model(zip_path, dir_name, progress=gr.Progress()):
+    extraction_folder = os.path.join(rvc_models_dir, dir_name)
     try:
-        extraction_folder = os.path.join(rvc_models_dir, dir_name)
         if os.path.exists(extraction_folder):
             raise gr.Error(f'Voice model directory {dir_name} already exists! Choose a different name for your voice model.')
 
@@ -100,6 +112,8 @@ def upload_local_model(zip_path, dir_name, progress=gr.Progress()):
         return f'[+] {dir_name} Model successfully uploaded!'
 
     except Exception as e:
+        if os.path.exists(extraction_folder):
+            shutil.rmtree(extraction_folder, ignore_errors=True)
         raise gr.Error(str(e))
 
 
@@ -202,10 +216,12 @@ if __name__ == '__main__':
                     rms_mix_rate = gr.Slider(0, 1, value=0.25, label='RMS mix rate', info="Control how much to mimic the original vocal's loudness (0) or a fixed loudness (1)")
                     protect = gr.Slider(0, 0.5, value=0.33, label='Protect rate', info='Protect voiceless consonants and breath sounds. Set to 0.5 to disable.')
                     with gr.Column():
-                        f0_method = gr.Dropdown(['rmvpe', 'mangio-crepe'], value='rmvpe', label='Pitch detection algorithm', info='Best option is rmvpe (clarity in vocals), then mangio-crepe (smoother vocals)')
+                        f0_method = gr.Dropdown(['rmvpe', 'rmvpe+', 'mangio-crepe', 'crepe', 'harvest', 'pm'], value='rmvpe', label='Pitch detection algorithm', info='Best option is rmvpe / rmvpe+ (clarity in vocals), then mangio-crepe (smoother vocals)')
                         crepe_hop_length = gr.Slider(32, 320, value=128, step=1, visible=False, label='Crepe hop length', info='Lower values leads to longer conversions and higher risk of voice cracks, but better pitch accuracy.')
                         f0_method.change(show_hop_slider, inputs=f0_method, outputs=crepe_hop_length)
-                keep_files = gr.Checkbox(label='Keep intermediate files', info='Keep all audio files generated in the song_output/id directory, e.g. Isolated Vocals/Instrumentals. Leave unchecked to save space')
+                with gr.Row():
+                    denoise = gr.Checkbox(value=True, label='Denoise', info='Vokalni ajratishda fon shovqini va artefaktlarni tozalash (Phase inversion)')
+                    keep_files = gr.Checkbox(label='Keep intermediate files', info='Keep all audio files generated in the song_output/id directory, e.g. Isolated Vocals/Instrumentals. Leave unchecked to save space')
 
             with gr.Accordion('Audio mixing options', open=False):
                 gr.Markdown('### Volume Change (decibels)')
@@ -225,7 +241,7 @@ if __name__ == '__main__':
                 output_format = gr.Dropdown(['mp3', 'wav'], value='mp3', label='Output file type', info='mp3: small file size, decent quality. wav: Large file size, best quality')
 
             with gr.Row():
-                clear_btn = gr.ClearButton(value='Clear', components=[song_input, rvc_model, keep_files, local_file])
+                clear_btn = gr.ClearButton(value='Clear', components=[song_input, rvc_model, keep_files, denoise, local_file])
                 generate_btn = gr.Button("Generate", variant='primary')
                 ai_cover = gr.Audio(label='AI Cover', show_share_button=False)
 
@@ -235,12 +251,12 @@ if __name__ == '__main__':
                                inputs=[song_input, rvc_model, pitch, keep_files, is_webui, main_gain, backup_gain,
                                        inst_gain, index_rate, filter_radius, rms_mix_rate, f0_method, crepe_hop_length,
                                        protect, pitch_all, reverb_rm_size, reverb_wet, reverb_dry, reverb_damping,
-                                       output_format],
+                                       output_format, denoise],
                                outputs=[ai_cover])
-            clear_btn.click(lambda: [0, 0, 0, 0, 0.5, 3, 0.25, 0.33, 'rmvpe', 128, 0, 0.15, 0.2, 0.8, 0.7, 'mp3', None],
+            clear_btn.click(lambda: [0, 0, 0, 0, 0.5, 3, 0.25, 0.33, 'rmvpe', 128, 0, 0.15, 0.2, 0.8, 0.7, 'mp3', None, True],
                             outputs=[pitch, main_gain, backup_gain, inst_gain, index_rate, filter_radius, rms_mix_rate,
                                      protect, f0_method, crepe_hop_length, pitch_all, reverb_rm_size, reverb_wet,
-                                     reverb_dry, reverb_damping, output_format, ai_cover])
+                                     reverb_dry, reverb_damping, output_format, ai_cover, denoise])
 
         # Download tab
         with gr.Tab('Download model'):
