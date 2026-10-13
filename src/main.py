@@ -16,7 +16,10 @@ if not hasattr(np, "int"):
 if not hasattr(np, "float"):
     np.float = float
 import soundfile as sf
-import sox
+try:
+    import sox
+except ImportError:
+    sox = None
 import torch
 
 # PyTorch 2.6+ compatibility patch for fairseq / RVC models
@@ -152,9 +155,14 @@ def pitch_shift(audio_path, pitch_change):
     output_path = f'{os.path.splitext(audio_path)[0]}_p{pitch_change}.wav'
     if not os.path.exists(output_path):
         y, sr = sf.read(audio_path)
-        tfm = sox.Transformer()
-        tfm.pitch(pitch_change)
-        y_shifted = tfm.build_array(input_array=y, sample_rate_in=sr)
+        if sox is not None:
+            tfm = sox.Transformer()
+            tfm.pitch(pitch_change)
+            y_shifted = tfm.build_array(input_array=y, sample_rate_in=sr)
+        else:
+            y_shifted = librosa.effects.pitch_shift(y.T if y.ndim > 1 else y, sr=sr, n_steps=pitch_change)
+            if y.ndim > 1:
+                y_shifted = y_shifted.T
         sf.write(output_path, y_shifted, sr)
 
     return output_path
