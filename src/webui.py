@@ -62,12 +62,12 @@ def update_models_list():
 
 def load_public_models():
     models_table = []
-    for model in public_models['voice_models']:
-        if not model['name'] in voice_models:
-            model = [model['name'], model['description'], model['credit'], model['url'], ', '.join(model['tags'])]
-            models_table.append(model)
+    for model in public_models.get('voice_models', []):
+        if not model.get('name') in voice_models:
+            model_row = [model.get('name', ''), model.get('description', ''), model.get('credit', ''), model.get('url', ''), ', '.join(model.get('tags', []))]
+            models_table.append(model_row)
 
-    tags = list(public_models['tags'].keys())
+    tags = list(public_models.get('tags', {}).keys())
     return gr.DataFrame.update(value=models_table), gr.CheckboxGroup.update(choices=tags)
 
 
@@ -142,30 +142,31 @@ def upload_local_model(zip_path, dir_name, progress=gr.Progress()):
 
 def filter_models(tags, query):
     models_table = []
+    voice_models_list = public_models.get('voice_models', [])
 
     # no filter
     if len(tags) == 0 and len(query) == 0:
-        for model in public_models['voice_models']:
+        for model in voice_models_list:
             models_table.append([model['name'], model['description'], model['credit'], model['url'], model['tags']])
 
     # filter based on tags and query
     elif len(tags) > 0 and len(query) > 0:
-        for model in public_models['voice_models']:
-            if all(tag in model['tags'] for tag in tags):
-                model_attributes = f"{model['name']} {model['description']} {model['credit']} {' '.join(model['tags'])}".lower()
+        for model in voice_models_list:
+            if all(tag in model.get('tags', []) for tag in tags):
+                model_attributes = f"{model['name']} {model['description']} {model['credit']} {' '.join(model.get('tags', []))}".lower()
                 if query.lower() in model_attributes:
                     models_table.append([model['name'], model['description'], model['credit'], model['url'], model['tags']])
 
     # filter based on only tags
     elif len(tags) > 0:
-        for model in public_models['voice_models']:
-            if all(tag in model['tags'] for tag in tags):
+        for model in voice_models_list:
+            if all(tag in model.get('tags', []) for tag in tags):
                 models_table.append([model['name'], model['description'], model['credit'], model['url'], model['tags']])
 
     # filter based on only query
     else:
-        for model in public_models['voice_models']:
-            model_attributes = f"{model['name']} {model['description']} {model['credit']} {' '.join(model['tags'])}".lower()
+        for model in voice_models_list:
+            model_attributes = f"{model['name']} {model['description']} {model['credit']} {' '.join(model.get('tags', []))}".lower()
             if query.lower() in model_attributes:
                 models_table.append([model['name'], model['description'], model['credit'], model['url'], model['tags']])
 
@@ -197,11 +198,20 @@ if __name__ == '__main__':
     parser.add_argument("--listen", action="store_true", default=False, help="Make the WebUI reachable from your local network.")
     parser.add_argument('--listen-host', type=str, help='The hostname that the server will use.')
     parser.add_argument('--listen-port', type=int, help='The listening port that the server will use.')
+    parser.add_argument('--ngrok', action="store_true", default=False, help="Enable ngrok tunnel.")
+    parser.add_argument('--ngrok-token', type=str, default="", help="Ngrok authtoken.")
     args = parser.parse_args()
 
     voice_models = get_current_models(rvc_models_dir)
-    with open(os.path.join(rvc_models_dir, 'public_models.json'), encoding='utf8') as infile:
-        public_models = json.load(infile)
+    public_models_file = os.path.join(rvc_models_dir, 'public_models.json')
+    if os.path.exists(public_models_file):
+        try:
+            with open(public_models_file, encoding='utf8') as infile:
+                public_models = json.load(infile)
+        except Exception:
+            public_models = {'voice_models': [], 'tags': {}}
+    else:
+        public_models = {'voice_models': [], 'tags': {}}
 
     with gr.Blocks(title='AICoverGenWebUI') as app:
 
@@ -353,9 +363,28 @@ if __name__ == '__main__':
                 local_upload_output_message = gr.Text(label='Output Message', interactive=False, scale=20)
                 model_upload_button.click(upload_local_model, inputs=[zip_file, local_model_name], outputs=local_upload_output_message)
 
+    server_port = args.listen_port
+    if args.ngrok or (args.ngrok_token and args.ngrok_token.strip()):
+        try:
+            from pyngrok import ngrok
+            if args.ngrok_token and args.ngrok_token.strip():
+                ngrok.set_auth_token(args.ngrok_token.strip())
+            tunnel_port = server_port if server_port else 7860
+            server_port = tunnel_port
+            ngrok.kill()
+            tunnel = ngrok.connect(tunnel_port)
+            print("\n" + "=" * 50)
+            print(f"🚀 Ngrok Tunnel tayyor: {tunnel.public_url}")
+            print("=" * 50 + "\n")
+        except ImportError:
+            print("⚠️ pyngrok o'rnatilmagan. O'rnatish uchun: pip install pyngrok")
+        except Exception as e:
+            print(f"⚠️ Ngrok xatosi: {e}")
+
     app.launch(
         share=args.share_enabled,
         enable_queue=True,
         server_name=None if not args.listen else (args.listen_host or '0.0.0.0'),
-        server_port=args.listen_port,
+        server_port=server_port,
+        inbrowser=not args.share_enabled,
     )

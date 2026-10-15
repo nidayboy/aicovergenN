@@ -118,6 +118,8 @@ python src/webui.py
 | `--listen`                                 | Make the web UI reachable from your local network. |
 | `--listen-host LISTEN_HOST`                | The hostname that the server will use. |
 | `--listen-port LISTEN_PORT`                | The listening port that the server will use. |
+| `--ngrok`                                  | Enable ngrok tunnel for public WebUI access. |
+| `--ngrok-token NGROK_TOKEN`                | Ngrok authtoken. |
 
 Once the following output message `Running on local URL:  http://127.0.0.1:7860` appears, you can click on the link to open a tab with the WebUI.
 
