@@ -34,7 +34,10 @@ if _orig_get_field is not None:
                 cls = args[0]
                 a_name = args[1]
                 default_val = getattr(cls, a_name, None)
-                f = dataclasses.field(default_factory=lambda: copy.deepcopy(default_val))
+                if default_val is None or default_val is dataclasses.MISSING or isinstance(default_val, getattr(dataclasses, "_MISSING_TYPE", type(None))):
+                    f = dataclasses.field()
+                else:
+                    f = dataclasses.field(default_factory=lambda: copy.deepcopy(default_val))
                 f.name = a_name
                 f.type = args[2]
                 f._field_type = getattr(dataclasses, "_FIELD", 1)
