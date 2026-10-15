@@ -65,7 +65,12 @@ if "torch.utils.tensorboard" not in sys.modules:
 if "tensorboard" not in sys.modules:
     sys.modules["tensorboard"] = MagicMock()
 
-import yt_dlp
+try:
+    import yt_dlp
+except ImportError:
+    import subprocess
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "yt-dlp"])
+    import yt_dlp
 from pedalboard import Pedalboard, Reverb, Compressor, HighpassFilter
 from pedalboard.io import AudioFile
 from pydub import AudioSegment
