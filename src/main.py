@@ -52,6 +52,16 @@ def _safe_torch_load(*args, **kwargs):
         kwargs["weights_only"] = False
     return _orig_torch_load(*args, **kwargs)
 torch.load = _safe_torch_load
+
+import sys
+from unittest.mock import MagicMock
+
+# Prevent fairseq from loading tensorboard/tensorflow/jax (avoids Colab numpy conflict)
+if "torch.utils.tensorboard" not in sys.modules:
+    sys.modules["torch.utils.tensorboard"] = MagicMock()
+if "tensorboard" not in sys.modules:
+    sys.modules["tensorboard"] = MagicMock()
+
 import yt_dlp
 from pedalboard import Pedalboard, Reverb, Compressor, HighpassFilter
 from pedalboard.io import AudioFile
